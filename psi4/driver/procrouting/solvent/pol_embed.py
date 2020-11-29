@@ -199,15 +199,230 @@ class CppeInterface:
             n_polsites = self.polarizable_coords.shape[0]
             natoms = self.molecule.natom()
             nuc_field_grad = self.cppe_state.nuclear_field_gradient().reshape(natoms, 3, n_polsites, 3)
+
+            # obtain expectation values of elec. field at polarizable sites
+            elec_fields = self.mints.electric_field_value(self.polarizable_coords, density_matrix).np
+            # solve induced moments
+            self.cppe_state.update_induced_moments(elec_fields.flatten(), False)
             induced_moments = np.array(self.cppe_state.get_induced_moments()).reshape(self.polarizable_coords.shape)
+
             grad_induction_nuc = -np.einsum("acpk,pk->ac", nuc_field_grad, induced_moments)
             pe_grad += grad_induction_nuc
+            
+            print(grad_induction_nuc)
 
             grad_induction_el = 0
             for ii, site in enumerate(self.polarizable_coords.np):
                 scaled_moments = [0.0, *cppe.prefactors(1)*induced_moments[ii]]
                 grad_induction_el -= self.mints.ao_multipole_potential_gradient(density_matrix, scaled_moments, site, 1).np
             pe_grad += grad_induction_el
+            print(grad_induction_el)
+
+        return core.Matrix.from_array(pe_grad)
+
+    # def nuclear_gradient_correlated(self, correlated_density, ref_density):
+    #     pe_grad = np.zeros_like(self.molecule.geometry().np)
+    #     n_bas = self.basisset.nbf()
+        
+    #     d_eff = correlated_density
+    #     d_hf = ref_density
+
+    #     d_delta = d_eff.clone()
+    #     d_delta.subtract(d_hf)
+
+    #     nuc_ee_grad = self.cppe_state.nuclear_interaction_energy_gradient()
+
+    #     el_ee_grad = 0
+    #     for site in self.cppe_state.potentials:
+    #         scaled_moments = []
+    #         max_k = 0
+    #         for multipole in site.multipoles:
+    #             if multipole.k > 2:
+    #                 raise NotImplementedError("k > 2 not implemented.")
+    #             if multipole.k > max_k:
+    #                 max_k = multipole.k
+    #             scaled_moments.extend(cppe.prefactors(multipole.k) * multipole.values)
+    #         el_ee_grad -= self.mints.ao_multipole_potential_gradient(d_eff, scaled_moments, site.position, max_k).np
+    #     pe_grad += el_ee_grad + nuc_ee_grad
+
+    #     if self._enable_induction:
+    #         n_polsites = self.polarizable_coords.shape[0]
+    #         natoms = self.molecule.natom()
+    #         nuc_field_grad = self.cppe_state.nuclear_field_gradient().reshape(natoms, 3, n_polsites, 3)
+
+    #         # correlated density
+    #         elec_fields_eff = self.mints.electric_field_value(self.polarizable_coords, d_eff).np
+    #         self.cppe_state.update_induced_moments(elec_fields_eff.flatten(), False)
+    #         induced_moments_eff = np.array(self.cppe_state.get_induced_moments()).reshape(self.polarizable_coords.shape)
+
+    #         grad_induction_nuc = -np.einsum("acpk,pk->ac", nuc_field_grad, induced_moments_eff)
+    #         pe_grad += grad_induction_nuc
+
+    #         grad_induction_el = 0
+    #         for ii, site in enumerate(self.polarizable_coords.np):
+    #             scaled_moments = [0.0, *cppe.prefactors(1)*induced_moments_eff[ii]]
+    #             grad_induction_el -= self.mints.ao_multipole_potential_gradient(d_hf, scaled_moments, site, 1).np
+    #         pe_grad += grad_induction_el
+
+    #         # ref density
+    #         elec_fields_hf = self.mints.electric_field_value(self.polarizable_coords, d_hf).np
+    #         self.cppe_state.update_induced_moments(elec_fields_hf.flatten(), False)
+    #         induced_moments_hf = np.array(self.cppe_state.get_induced_moments()).reshape(self.polarizable_coords.shape)
+
+    #         grad_induction_el = 0
+    #         for ii, site in enumerate(self.polarizable_coords.np):
+    #             scaled_moments = [0.0, *cppe.prefactors(1)*induced_moments_hf[ii]]
+    #             grad_induction_el -= self.mints.ao_multipole_potential_gradient(d_delta, scaled_moments, site, 1).np
+    #         pe_grad += grad_induction_el
+
+    #     return core.Matrix.from_array(pe_grad)
+
+    # def nuclear_gradient_correlated(self, correlated_density, ref_density):
+    #     pe_grad = np.zeros_like(self.molecule.geometry().np)
+    #     n_bas = self.basisset.nbf()
+        
+    #     d_eff = correlated_density
+    #     d_hf = ref_density
+    #     d_delta = core.Matrix.from_array(d_eff.np - d_hf.np)
+
+    #     nuc_ee_grad = self.cppe_state.nuclear_interaction_energy_gradient()
+
+    #     el_ee_grad = 0
+    #     for site in self.cppe_state.potentials:
+    #         scaled_moments = []
+    #         max_k = 0
+    #         for multipole in site.multipoles:
+    #             if multipole.k > 2:
+    #                 raise NotImplementedError("k > 2 not implemented.")
+    #             if multipole.k > max_k:
+    #                 max_k = multipole.k
+    #             scaled_moments.extend(cppe.prefactors(multipole.k) * multipole.values)
+    #         el_ee_grad -= self.mints.ao_multipole_potential_gradient(d_eff, scaled_moments, site.position, max_k).np
+    #     pe_grad += el_ee_grad + nuc_ee_grad
+
+    #     if self._enable_induction:
+    #         print("Hierher wird induction part schon gemacht.")
+    #         n_polsites = self.polarizable_coords.shape[0]
+    #         natoms = self.molecule.natom()
+    #         nuc_field_grad = self.cppe_state.nuclear_field_gradient().reshape(natoms, 3, n_polsites, 3)
+
+    #         # correlated density
+    #         elec_fields_eff = self.mints.electric_field_value(self.polarizable_coords, d_eff).np
+    #         self.cppe_state.update_induced_moments(elec_fields_eff.flatten(), False)
+    #         induced_moments_eff = np.array(self.cppe_state.get_induced_moments()).reshape(self.polarizable_coords.shape)
+
+    #         grad_induction_nuc = -np.einsum("acpk,pk->ac", nuc_field_grad, induced_moments_eff)
+    #         pe_grad += grad_induction_nuc
+    #         ######################
+
+    #         elec_fields_hf = self.mints.electric_field_value(self.polarizable_coords, d_hf).np
+    #         self.cppe_state.update_induced_moments(elec_fields_hf.flatten(), False)
+    #         induced_moments_hf = np.array(self.cppe_state.get_induced_moments()).reshape(self.polarizable_coords.shape)
+
+    #         grad_induction_el_corr = 0
+    #         for ii, site in enumerate(self.polarizable_coords.np):
+    #             scaled_moments = [0.0, *cppe.prefactors(1)*induced_moments_hf[ii]]
+    #             grad_induction_el_corr -= self.mints.ao_multipole_potential_gradient(d_eff, scaled_moments, site, 1).np
+    #         pe_grad += grad_induction_el_corr
+            
+    #         print(grad_induction_el_corr)
+
+    #         grad_induction_el_diff = 0
+    #         diff_moments = induced_moments_eff - induced_moments_hf
+    #         for ii, site in enumerate(self.polarizable_coords.np):
+    #             scaled_moments = [0.0, *cppe.prefactors(1)*diff_moments[ii]]
+    #             grad_induction_el_diff -= self.mints.ao_multipole_potential_gradient(d_hf, scaled_moments, site, 1).np
+    #         pe_grad += grad_induction_el_diff
+            
+
+    #     return core.Matrix.from_array(pe_grad)
+
+    def nuclear_gradient_correlated(self, correlated_density, ref_density):
+        pe_grad = np.zeros_like(self.molecule.geometry().np)
+        n_bas = self.basisset.nbf()
+        
+        d_eff = correlated_density
+        d_hf = ref_density
+        d_delta = core.Matrix.from_array(d_eff.np - d_hf.np)
+
+        nuc_ee_grad = self.cppe_state.nuclear_interaction_energy_gradient()
+
+        el_ee_grad = 0
+        for site in self.cppe_state.potentials:
+            scaled_moments = []
+            max_k = 0
+            for multipole in site.multipoles:
+                if multipole.k > 2:
+                    raise NotImplementedError("k > 2 not implemented.")
+                if multipole.k > max_k:
+                    max_k = multipole.k
+                scaled_moments.extend(cppe.prefactors(multipole.k) * multipole.values)
+            el_ee_grad -= self.mints.ao_multipole_potential_gradient(d_eff, scaled_moments, site.position, max_k).np
+        pe_grad += el_ee_grad + nuc_ee_grad
+
+        if self._enable_induction:
+            print("Hierher wird falscher Gradient schon gemacht.")
+            n_polsites = self.polarizable_coords.shape[0]
+            natoms = self.molecule.natom()
+            nuc_field_grad = self.cppe_state.nuclear_field_gradient().reshape(natoms, 3, n_polsites, 3)
+
+            # correlated density
+            elec_fields_eff = self.mints.electric_field_value(self.polarizable_coords, d_eff).np
+            self.cppe_state.update_induced_moments(elec_fields_eff.flatten(), False)
+            induced_moments_eff = np.array(self.cppe_state.get_induced_moments()).reshape(self.polarizable_coords.shape)
+
+            elec_fields_delta = self.mints.electric_field_value(self.polarizable_coords, d_delta).np
+            self.cppe_state.update_induced_moments(elec_fields_delta.flatten(), True)
+            induced_moments_delta = np.array(self.cppe_state.get_induced_moments()).reshape(self.polarizable_coords.shape)
+            
+            elec_fields_hf = self.mints.electric_field_value(self.polarizable_coords, d_hf).np
+            self.cppe_state.update_induced_moments(elec_fields_hf.flatten(), False)
+            induced_moments_hf = np.array(self.cppe_state.get_induced_moments()).reshape(self.polarizable_coords.shape)
+
+            grad_induction_nuc = -0.5 * (
+                + np.einsum("acpk,pk->ac", nuc_field_grad, induced_moments_eff)
+                + np.einsum("acpk,pk->ac", nuc_field_grad, induced_moments_delta)
+                + np.einsum("acpk,pk->ac", nuc_field_grad, induced_moments_hf)
+            )
+            pe_grad += grad_induction_nuc
+            ######################
+
+            grad_induction_el_corr = 0
+            d_delta2 = core.Matrix.from_array(d_eff.np + d_delta.np)
+            for ii, site in enumerate(self.polarizable_coords.np):
+                scaled_moments = [0.0, *cppe.prefactors(1)*induced_moments_hf[ii]]
+                grad_induction_el_corr -= self.mints.ao_multipole_potential_gradient(d_delta2, scaled_moments, site, 1).np
+            pe_grad += 0.5 * grad_induction_el_corr
+
+            grad_induction_el_diff = 0
+            diff_moments = induced_moments_eff + induced_moments_delta
+            for ii, site in enumerate(self.polarizable_coords.np):
+                scaled_moments = [0.0, *cppe.prefactors(1)*diff_moments[ii]]
+                grad_induction_el_diff -= self.mints.ao_multipole_potential_gradient(d_hf, scaled_moments, site, 1).np
+            pe_grad += 0.5 * grad_induction_el_diff
+        print("Ohje")
+
+        return core.Matrix.from_array(pe_grad)
+    
+    def nuclear_gradient_cis(self, d_xi):
+        print("d_xi contribution")
+        pe_grad = np.zeros_like(self.molecule.geometry().np)
+        n_bas = self.basisset.nbf()
+
+        if self._enable_induction:
+            n_polsites = self.polarizable_coords.shape[0]
+            natoms = self.molecule.natom()
+
+            # correlated density
+            elec_fields_eff = self.mints.electric_field_value(self.polarizable_coords, d_xi).np
+            self.cppe_state.update_induced_moments(elec_fields_eff.flatten(), True)
+            induced_moments_eff = np.array(self.cppe_state.get_induced_moments()).reshape(self.polarizable_coords.shape)
+
+            grad_induction_el = 0
+            for ii, site in enumerate(self.polarizable_coords.np):
+                scaled_moments = [0.0, *cppe.prefactors(1)*induced_moments_eff[ii]]
+                grad_induction_el -= self.mints.ao_multipole_potential_gradient(d_xi, scaled_moments, site, 1).np
+            pe_grad += 1.0 * grad_induction_el
 
         return core.Matrix.from_array(pe_grad)
 
